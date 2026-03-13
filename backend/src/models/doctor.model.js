@@ -53,7 +53,8 @@ const doctorSchema = new mongoose.Schema(
 );
 
 
-
+doctorSchema.index({ hospitalId: 1 });
+doctorSchema.index({ specialization: 1 });
 // ─────────────────────────────────────────
 // METHOD → Check if doctor can take case
 // ─────────────────────────────────────────

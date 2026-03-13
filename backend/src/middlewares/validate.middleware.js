@@ -1,22 +1,42 @@
-import AppError from "../utils/AppError.js";
+import ApiError from '../utils/ApiError.js'
+import { validationResult } from "express-validator";
 
-/**
- * Lightweight field-presence validator.
- * Pass the required field names; it throws a 400 if any are missing/empty.
- *
- * Usage: router.post("/register", validate("name","email","password"), handler)
- */
-export const validate =
-  (...fields) =>
-  (req, _res, next) => {
-    const missing = fields.filter(
-      (f) => req.body[f] === undefined || req.body[f] === ""
-    );
+export const validate = (req, res, next) => {
 
-    if (missing.length)
-      return next(
-        new AppError(`Missing required fields: ${missing.join(", ")}`, 400)
-      );
+const errors = validationResult(req);
 
-    next();
-  };
+if (!errors.isEmpty()) {
+return res.status(400).json({
+status: "error",
+errors: errors.array()
+});
+}
+
+next();
+};
+
+// Emergency validation
+export const validateEmergency = (req, res, next) => {
+
+const { symptoms, location } = req.body;
+
+if (!symptoms) {
+return res.status(400).json({
+status: "error",
+message: "Symptoms required"
+});
+}
+
+if (
+!location ||
+typeof location.lat !== "number" ||
+typeof location.lng !== "number"
+) {
+return res.status(400).json({
+status: "error",
+message: "Valid location required"
+});
+}
+
+next();
+};

@@ -61,6 +61,11 @@ const emergencyCaseSchema = new mongoose.Schema(
       default: null
     },
 
+    isSimulation: {
+      type: Boolean,
+      default: false
+    },
+
     status: {
       type: String,
       enum: [
@@ -80,7 +85,7 @@ const emergencyCaseSchema = new mongoose.Schema(
 
 // GEO INDEX → find nearest hospitals/ambulances
 emergencyCaseSchema.index({ location: "2dsphere" });
-
+emergencyCaseSchema.index({ status: 1, priority: 1 });
 
 // ─────────────────────────────────────────
 // METHOD → assign hospital

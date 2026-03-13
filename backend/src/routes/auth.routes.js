@@ -5,23 +5,22 @@ import {
   login,
   refreshToken,
   logout,
-  getMe,
-} from "../controllers/auth.controller.js";
+  getMe
+} from "../controllers/auth.controllers.js";
 
-import { authenticateUser } from "../middleware/auth.middleware.js";
-import { validate } from "../middleware/validate.middleware.js";
+import { protect } from "../middlewares/auth.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
 
 import {
   registerValidator,
-  loginValidator,
+  loginValidator
 } from "../validators/auth.validator.js";
 
 const router = Router();
 
+// ── Public Routes ─────────────────────────
 
-// ── Public Routes ─────────────────────────────────────────
-
-// Register new user
+// Register
 router.post(
   "/register",
   registerValidator,
@@ -29,7 +28,7 @@ router.post(
   register
 );
 
-// Login user
+// Login
 router.post(
   "/login",
   loginValidator,
@@ -37,19 +36,17 @@ router.post(
   login
 );
 
-// Refresh access token
+// Refresh token
 router.post("/refresh", refreshToken);
 
-// Logout user
+// Logout
 router.post("/logout", logout);
 
+// ── Protected Routes ─────────────────────
 
-// ── Protected Routes ─────────────────────────────────────
-
-// Get current user profile
 router.get(
   "/me",
-  authenticateUser,
+  protect,
   getMe
 );
 

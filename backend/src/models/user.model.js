@@ -52,7 +52,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false
     }
-
   },
   { timestamps: true }
 );
@@ -63,21 +62,25 @@ const userSchema = new mongoose.Schema(
 // ─────────────────────────────────────────
 userSchema.pre("save", async function (next) {
 
-  if (!this.isModified("passwordHash")) return next();
+  if (!this.isModified("password")) return //next();
 
-  this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
+  this.password = await bcrypt.hash(this.password, 8);
 
-  next();
+  // next();
 
 });
+
+
+// GEO INDEX
+userSchema.index({ location: "2dsphere" });
 
 
 // ─────────────────────────────────────────
 // COMPARE PASSWORD
 // ─────────────────────────────────────────
-userSchema.methods.comparePassword = async function (password) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
 
-  return bcrypt.compare(password, this.password);
+  return bcrypt.compare(candidatePassword, this.password);
 
 };
 
@@ -101,6 +104,10 @@ userSchema.methods.generateAccessToken = function () {
 
 };
 
+export const verifyAccessToken = (token) => {
+  return jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+};
+
 
 // ─────────────────────────────────────────
 // GENERATE REFRESH TOKEN
@@ -121,8 +128,7 @@ userSchema.methods.generateRefreshToken = function () {
 
 
 // ─────────────────────────────────────────
-// GENERATE TEMP TOKEN
-// (used for OTP / verification etc)
+// GENERATE TEMP TOKEN (OTP / verification)
 // ─────────────────────────────────────────
 userSchema.methods.generateTempToken = function () {
 
