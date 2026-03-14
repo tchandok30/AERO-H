@@ -7,7 +7,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
 
 import { analyzeSymptoms } from "../services/gemini.service.js";
-import { allocateResources } from "../services/allocation.service.js";
+import { getAIAllocation } from "../services/aiAllocator.service.js";
 
 
 // ─────────────────────────────────────────
@@ -17,47 +17,97 @@ export const reportEmergency = asyncHandler(async (req, res) => {
 
   const { symptoms, lat, lng } = req.body;
 
-  if (!symptoms || lat === undefined || lng === undefined)
+  if (!symptoms || lat === undefined || lng === undefined) {
     throw new ApiError("Symptoms and location required", 400);
+  }
 
+  // ── Phase 1: Gemini Neural Triage
   const triage = await analyzeSymptoms(symptoms);
 
+  // ── Create Emergency Case
   const emergency = await EmergencyCase.create({
     reportedBy: req.user._id,
     symptoms,
     severityScore: triage.severityScore,
     priority: triage.priority,
     requiredSpecialization: triage.requiredSpecialization,
-    location: { type: "Point", coordinates: [lng, lat] },
+    location: {
+      type: "Point",
+      coordinates: [lng, lat]
+    },
     status: "reported"
   });
 
-  const { ambulance, hospital, doctor } = await allocateResources(emergency);
+  // ── Fetch Available Resources
+  const [hospitals, doctors, ambulances] = await Promise.all([
+    Hospital.find(),
+    Doctor.find({ available: true }),
+    Ambulance.find({ status: "available" })
+  ]);
 
-  if (ambulance) {
-    ambulance.status = "dispatched";
-    ambulance.currentEmergencyId = emergency._id;
-    await ambulance.save();
+  // ── Phase 2: AI Allocation Engine
+  const allocation = await getAIAllocation(
+    symptoms,
+    lat,
+    lng,
+    triage,          // ✅ FIXED
+    hospitals,
+    doctors,
+    ambulances
+  );
 
-    emergency.ambulanceId = ambulance._id;
-    emergency.status = "ambulance_assigned";
+  let ambulance = null;
+  let doctor = null;
+  let hospital = null;
+
+  // ── Assign Ambulance
+  if (allocation?.ambulanceId) {
+
+    ambulance = await Ambulance.findById(allocation.ambulanceId);
+
+    if (ambulance && ambulance.status === "available") {
+
+      ambulance.status = "dispatched";
+      ambulance.currentEmergencyId = emergency._id;
+
+      await ambulance.save();
+
+      emergency.ambulanceId = ambulance._id;
+      emergency.status = "ambulance_assigned";
+    }
   }
 
-  if (hospital) emergency.hospitalId = hospital._id;
+  // ── Assign Hospital
+  if (allocation?.hospitalId) {
 
-  if (doctor) {
-    doctor.available = false;
-    doctor.currentCaseId = emergency._id;
-    await doctor.save();
+    hospital = await Hospital.findById(allocation.hospitalId);
 
-    emergency.doctorId = doctor._id;
+    if (hospital) {
+      emergency.hospitalId = hospital._id;
+    }
+  }
+
+  // ── Assign Doctor
+  if (allocation?.doctorId) {
+
+    doctor = await Doctor.findById(allocation.doctorId);
+
+    if (doctor && doctor.available) {
+
+      doctor.available = false;
+      doctor.currentCaseId = emergency._id;
+
+      await doctor.save();
+
+      emergency.doctorId = doctor._id;
+    }
   }
 
   await emergency.save();
 
   res.status(201).json({
     status: "success",
-    message: "Emergency reported and resources allocated",
+    message: "Emergency reported and AI resources allocated",
     emergency
   });
 
@@ -95,8 +145,9 @@ export const getEmergencyById = asyncHandler(async (req, res) => {
     .populate("doctorId")
     .populate("ambulanceId");
 
-  if (!emergency)
+  if (!emergency) {
     throw new ApiError("Emergency not found", 404);
+  }
 
   res.status(200).json({
     status: "success",
@@ -117,8 +168,9 @@ export const updateEmergencyStatus = asyncHandler(async (req, res) => {
     { new: true }
   );
 
-  if (!emergency)
+  if (!emergency) {
     throw new ApiError("Emergency not found", 404);
+  }
 
   res.status(200).json({
     status: "success",
@@ -129,7 +181,7 @@ export const updateEmergencyStatus = asyncHandler(async (req, res) => {
 
 
 // ─────────────────────────────────────────
-// Assign Hospital
+// Assign Hospital (Manual Override)
 // ─────────────────────────────────────────
 export const assignHospital = asyncHandler(async (req, res) => {
 
@@ -140,11 +192,13 @@ export const assignHospital = asyncHandler(async (req, res) => {
     Hospital.findById(hospitalId)
   ]);
 
-  if (!emergency)
+  if (!emergency) {
     throw new ApiError("Emergency not found", 404);
+  }
 
-  if (!hospital)
+  if (!hospital) {
     throw new ApiError("Hospital not found", 404);
+  }
 
   emergency.hospitalId = hospitalId;
   emergency.status = "triaged";
@@ -161,7 +215,7 @@ export const assignHospital = asyncHandler(async (req, res) => {
 
 
 // ─────────────────────────────────────────
-// Assign Ambulance
+// Assign Ambulance (Manual Override)
 // ─────────────────────────────────────────
 export const assignAmbulance = asyncHandler(async (req, res) => {
 
@@ -172,14 +226,17 @@ export const assignAmbulance = asyncHandler(async (req, res) => {
     Ambulance.findById(ambulanceId)
   ]);
 
-  if (!emergency)
+  if (!emergency) {
     throw new ApiError("Emergency not found", 404);
+  }
 
-  if (!ambulance)
+  if (!ambulance) {
     throw new ApiError("Ambulance not found", 404);
+  }
 
-  if (ambulance.status !== "available")
+  if (ambulance.status !== "available") {
     throw new ApiError("Ambulance not available", 400);
+  }
 
   ambulance.status = "dispatched";
   ambulance.currentEmergencyId = emergency._id;
@@ -202,7 +259,7 @@ export const assignAmbulance = asyncHandler(async (req, res) => {
 
 
 // ─────────────────────────────────────────
-// Assign Doctor
+// Assign Doctor (Manual Override)
 // ─────────────────────────────────────────
 export const assignDoctor = asyncHandler(async (req, res) => {
 
@@ -213,14 +270,17 @@ export const assignDoctor = asyncHandler(async (req, res) => {
     Doctor.findById(doctorId)
   ]);
 
-  if (!emergency)
+  if (!emergency) {
     throw new ApiError("Emergency not found", 404);
+  }
 
-  if (!doctor)
+  if (!doctor) {
     throw new ApiError("Doctor not found", 404);
+  }
 
-  if (!doctor.available)
+  if (!doctor.available) {
     throw new ApiError("Doctor not available", 400);
+  }
 
   doctor.available = false;
   doctor.currentCaseId = emergency._id;
@@ -253,8 +313,9 @@ export const closeEmergency = asyncHandler(async (req, res) => {
     { new: true }
   );
 
-  if (!emergency)
+  if (!emergency) {
     throw new ApiError("Emergency not found", 404);
+  }
 
   res.status(200).json({
     status: "success",

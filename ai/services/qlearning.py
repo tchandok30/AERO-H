@@ -1,6 +1,7 @@
 import numpy as np
 
 class HackathonAllocator:
+
     def __init__(self):
         self.W_DISTANCE = 0.35
         self.W_LOAD = 0.45
@@ -8,11 +9,16 @@ class HackathonAllocator:
         self.W_AMB = 0.25
         self.LR = 0.01
 
+
     def calculate_score(self, hospital, patient_loc):
-        dist = np.sqrt((hospital['x'] - patient_loc[0])**2 +
-                       (hospital['y'] - patient_loc[1])**2)
+
+        dist = np.sqrt(
+            (hospital['x'] - patient_loc[0])**2 +
+            (hospital['y'] - patient_loc[1])**2
+        )
 
         norm_dist = min(dist / 100, 1.0)
+
         load = 1 - (hospital['beds_available'] / hospital['total_beds'])
 
         ambulance_factor = 1 if hospital.get("ambulance_available", 0) > 0 else 0
@@ -29,7 +35,9 @@ class HackathonAllocator:
 
         return score, load, norm_dist
 
+
     def update_weights(self, load, dist_norm):
+
         self.W_LOAD += self.LR * load
         self.W_DISTANCE += self.LR * dist_norm
 
@@ -37,6 +45,7 @@ class HackathonAllocator:
 
         self.W_DISTANCE /= total
         self.W_LOAD /= total
+
 
     def allocate_batch(self, hospitals, patients):
 
@@ -71,12 +80,10 @@ class HackathonAllocator:
 
             target["beds_available"] -= 1
 
-            hospital_id = target.get("id")
+            # 🔥 FIX HERE
+            hospital_id = str(target.get("_id"))
 
-            ambulance_id = target.get(
-                "ambulance_id",
-                f"amb_{np.random.randint(1000,9999)}"
-            )
+            ambulance_id = None
 
             self.update_weights(best_load, best_dist)
 
